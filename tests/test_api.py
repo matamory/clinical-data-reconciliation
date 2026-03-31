@@ -128,12 +128,11 @@ class TestReconciliationAPI:
         }
         
         response = client.post("/api/reconcile/medication", json=payload)
-        assert response.status_code == 200
+        assert response.status_code == 422
         data = response.json()
-        
-        # Should return empty result, not crash
-        assert data["confidence_score"] == 0.0
-        assert data["clinical_safety_check"] == "REVIEW_REQUIRED"
+
+        # Should return a 422 error with a detail message
+        assert "detail" in data
 
     def test_reconcile_prefers_recent_renal_appropriate_metformin(self):
         """Select more recent, renal-appropriate metformin dose when eGFR is reduced."""

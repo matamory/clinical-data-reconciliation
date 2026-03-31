@@ -43,6 +43,7 @@ def health_check():
     return {"status": "healthy"}
 
 
+# Governing: SPEC-0002 REQ "API Contract", ADR-0002
 @app.post('/api/reconcile/medication', response_model=ReconciliationResult)
 def reconcile_medication(record: PatientRecord) -> ReconciliationResult:
     """
@@ -57,6 +58,9 @@ def reconcile_medication(record: PatientRecord) -> ReconciliationResult:
     - Clinical safety check
     - Recommended actions
     """
+    if not record.sources:
+        raise HTTPException(status_code=422, detail="At least one medication source is required")
+
     try:
         # Convert Pydantic models to dicts for service processing
         patient_context = record.patient_context.model_dump() if hasattr(record.patient_context, 'model_dump') else record.patient_context.__dict__
