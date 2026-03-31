@@ -10,6 +10,8 @@ try:
 except Exception:
     load_dotenv = None
 
+# PII Exclusion: prompts include age, conditions, labs only — never name/DOB/MRN (HIPAA, ADR-0002 D4)
+
 
 # Load environment variables from project and backend .env files
 backend_dir = Path(__file__).resolve().parents[1]
@@ -89,6 +91,7 @@ class LLMScorer:
             "model_used": "local-heuristic"
         }
     
+    # Governing: SPEC-0002 REQ "LLM Scoring", ADR-0002
     @staticmethod
     def score_medication(
         patient_context: Dict[str, Any],
@@ -166,6 +169,7 @@ Respond in JSON format with keys: score, medication, reasoning
             heuristic["model_used"] = "fallback"
             return heuristic
 
+    # Governing: SPEC-0002 REQ "Safety Check", ADR-0002
     @staticmethod
     def validate_safety(medication: str, patient_context: Dict[str, Any]) -> Dict[str, Any]:
         """
