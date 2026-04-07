@@ -337,6 +337,7 @@ class MedicationReconciliation:
             ]
         }
     
+    # Governing: SPEC-0002 REQ "Confidence Score Calibration", ADR-0002
     def _calculate_confidence(
         self,
         candidate_scores: List[Dict],
@@ -380,6 +381,7 @@ class MedicationReconciliation:
             "uncertainty": uncertainty
         }
     
+    # Governing: SPEC-0002 REQ "Uncertainty Detection and Recommended Actions", ADR-0002
     def _detect_uncertainty(
         self,
         sources: List[Dict],
@@ -527,6 +529,7 @@ class MedicationReconciliation:
         
         return reasoning
     
+    # Governing: SPEC-0002 REQ "Uncertainty Detection and Recommended Actions", ADR-0002
     def _generate_actions(
         self,
         winner: Dict,
