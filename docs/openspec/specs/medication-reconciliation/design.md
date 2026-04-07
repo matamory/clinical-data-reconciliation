@@ -9,7 +9,7 @@ The engine was built to satisfy the Onye EHR Integration intern take-home assess
 Constraints:
 - HIPAA: PII (name, DOB, MRN) MUST NOT be sent to OpenAI
 - The engine must be functional with no `OPENAI_API_KEY` (local fallback required)
-- No database persistence is required in the current implementation (in-memory per-request)
+- Reconciliation results ARE persisted to the database (SQLAlchemy ORM, per SPEC-0001 REQ "SQLAlchemy ORM Data Layer"); this constraint was removed when ADR-0001 migration was completed
 
 ---
 
@@ -23,7 +23,6 @@ Constraints:
 - Enforce clinical safety checks (drug-condition interaction) before surfacing a recommendation
 
 ### Non-Goals
-- Persistent storage of reconciliation history (future ADR-0001 migration scope)
 - Real-time webhook push of reconciliation results
 - Support for non-medication clinical data reconciliation (separate validation service)
 - FHIR/HL7 format parsing (raw JSON input only in current version)
@@ -73,7 +72,7 @@ Constraints:
 ```mermaid
 sequenceDiagram
     participant Client
-    participant API as FastAPI /api/reconcile/medication
+    participant API as Flask Blueprint /api/reconcile/medication
     participant Reconciler as MedicationReconciliation
     participant Det as Deterministic Scorer
     participant LLM as LLMScorer (GPT-3.5-turbo)
@@ -114,10 +113,12 @@ sequenceDiagram
 
 | Component | File | Responsibility |
 |-----------|------|----------------|
-| API endpoint | `backend/main.py` | Request validation, response serialization |
+| Flask blueprint | `backend/api/reconciliation.py` | Request validation (Marshmallow), ORM persistence, response serialization |
 | `MedicationReconciliation` | `backend/reconcilation_service/reconcile_meds.py` | Orchestrates scoring pipeline; computes hybrid score, confidence, actions |
 | `LLMScorer` | `backend/ai_service/llm.py` | OpenAI API calls; local heuristic fallback; safety validation |
-| Pydantic models | `backend/models.py` | Input/output contracts: `PatientRecord`, `ReconciliationResult`, `SafetyCheck` |
+| Pydantic models | `backend/pydantic_models.py` | Input/output contracts used by service layer: `PatientRecord`, `ReconciliationResult`, `SafetyCheck` |
+| Marshmallow schemas | `backend/schemas.py` | API-level request/response serialization and OpenAPI doc generation |
+| ORM model | `backend/models/reconciliation.py` | Persists reconciliation results with timestamp (SPEC-0001) |
 
 ### Deterministic Sub-score Composition
 

@@ -54,6 +54,7 @@ def reconcile_medication(args):
         db.session.commit()
 
         # Governing: SPEC-0002 REQ "LLM Scoring" — response MUST include model_used
+        # Governing: SPEC-0002 REQ "Uncertainty Detection" — response MUST include requires_review
         return {
             "reconciled_medication": db_record.reconciled_medication,
             "confidence_score": db_record.confidence_score,
@@ -61,6 +62,7 @@ def reconcile_medication(args):
             "reasoning": db_record.reasoning,
             "recommended_actions": db_record.recommended_actions or [],
             "model_used": result.get("model_used", "unknown"),
+            "requires_review": result.get("requires_review", False),
         }
     except Exception as exc:
         db.session.rollback()

@@ -60,6 +60,8 @@ class ReconciliationResultSchema(Schema):
     recommended_actions = fields.List(fields.Str(), dump_default=[])
     # Governing: SPEC-0002 REQ "LLM Scoring" — response MUST include model_used
     model_used = fields.Str(dump_default="unknown")
+    # Governing: SPEC-0002 REQ "Uncertainty Detection and Recommended Actions" — MUST be in response
+    requires_review = fields.Bool(dump_default=False)
 
 
 class DemographicsSchema(Schema):

@@ -208,18 +208,29 @@ Check for:
 Respond in JSON with: is_safe (boolean), concerns (list), recommendation (string)
 """
 
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a clinical pharmacist. Reply only with valid JSON."},
-                    {"role": "user", "content": context}
-                ],
-                temperature=0.1,
-                max_tokens=250,
-                response_format={"type": "json_object"}
-            )
+            # Governing: SPEC-0002 REQ "LLM Scoring" — LLM calls MUST be retried once on transient failure
+            result = None
+            last_error = None
+            for _ in range(2):
+                try:
+                    response = client.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": "You are a clinical pharmacist. Reply only with valid JSON."},
+                            {"role": "user", "content": context}
+                        ],
+                        temperature=0.1,
+                        max_tokens=250,
+                        response_format={"type": "json_object"}
+                    )
+                    result = LLMScorer._safe_json_parse(response.choices[0].message.content)
+                    break
+                except Exception as error:
+                    last_error = error
 
-            result = LLMScorer._safe_json_parse(response.choices[0].message.content)
+            if result is None:
+                raise RuntimeError(f"Safety check failed after retry: {last_error}")
+
             return result
         except Exception as e:
             return {
