@@ -414,7 +414,11 @@ class MedicationReconciliation:
             safety_result = LLMScorer.validate_safety(medication, patient_context)
             if safety_result.get("error"):
                 return "REVIEW_REQUIRED"
-            
+            # Governing: SPEC-0002 REQ "Safety Check" — LLM required for safety determination;
+            # local-heuristic/fallback cannot confirm safety, so return REVIEW_REQUIRED
+            if safety_result.get("model_used") in {"local-heuristic", "fallback"}:
+                return "REVIEW_REQUIRED"
+
             if not safety_result.get("is_safe", True):
                 return "FAILED"
             
