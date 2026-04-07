@@ -36,6 +36,12 @@ def create_app(config_name: str = "default") -> Flask:
     migrate.init_app(app, db)
     CORS(app)
 
+    # Import ORM models so Flask-Migrate (Alembic) discovers them during
+    # `flask db migrate` autogenerate. Must happen inside create_app() to
+    # avoid circular imports.
+    # Governing: SPEC-0001 REQ "SQLAlchemy ORM Data Layer"
+    from . import models  # noqa: F401
+
     # Register one blueprint per domain (Governing: ADR-0001 blueprint-per-domain)
     from .api.health import health_bp
     from .api.reconciliation import reconciliation_bp
