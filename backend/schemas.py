@@ -102,12 +102,14 @@ class QualityBreakdownSchema(Schema):
     timeliness = fields.Int(required=True)
 
 
+# Governing: SPEC-0003 REQ "Issue Object Schema" — exactly three fields; severity is plain string
 class IssueSchema(Schema):
     field = fields.Str(required=True)
     issue = fields.Str(required=True)
     severity = fields.Str(required=True)
 
 
+# Governing: SPEC-0003 REQ "API Contract" — overall_score int 0-100, breakdown, issues_detected
 class DataQualityOutputSchema(Schema):
     overall_score = fields.Int(required=True)
     breakdown = fields.Nested(QualityBreakdownSchema, required=True)
