@@ -58,6 +58,8 @@ class ReconciliationResultSchema(Schema):
     clinical_safety_check = fields.Str(required=True)
     reasoning = fields.Str(dump_default="")
     recommended_actions = fields.List(fields.Str(), dump_default=[])
+    # Governing: SPEC-0002 REQ "LLM Scoring" — response MUST include model_used
+    model_used = fields.Str(dump_default="unknown")
 
 
 class DemographicsSchema(Schema):

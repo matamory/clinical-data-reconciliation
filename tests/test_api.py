@@ -33,7 +33,16 @@ class _FlaskTestClient:
         return _ResponseWrapper(self._client.post(url, json=json, **kwargs))
 
 
-client = _FlaskTestClient(create_app("testing"))
+_app = create_app("testing")
+
+# Create all ORM tables in the in-memory test database.
+# Flask-Migrate manages migrations in production; tests use db.create_all() directly
+# since SQLite :memory: databases don't persist between processes.
+with _app.app_context():
+    from backend import db as _db
+    _db.create_all()
+
+client = _FlaskTestClient(_app)
 
 
 class TestReconciliationAPI:

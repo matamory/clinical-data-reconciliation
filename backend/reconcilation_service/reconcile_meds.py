@@ -323,6 +323,8 @@ class MedicationReconciliation:
             ),
             "recommended_actions": actions,
             "clinical_safety_check": safety_check,
+            # Governing: SPEC-0002 REQ "LLM Scoring" — surface model_used for API response
+            "model_used": llm_result.get("model_used", "unknown"),
             "uncertainty_signals": uncertainty_signals,
             "requires_review": requires_review,
             "all_candidates": [
