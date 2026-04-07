@@ -2,16 +2,21 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime, date
 from ..pydantic_models import Issue, Severity
 
+# Governing: SPEC-0003 REQ "API Contract", SPEC-0003 REQ "Overall Score Formula",
+#            SPEC-0003 REQ "Completeness Dimension", SPEC-0003 REQ "Validity Dimension",
+#            SPEC-0003 REQ "Consistency Dimension", SPEC-0003 REQ "Timeliness Dimension",
+#            SPEC-0003 REQ "Issue Object Schema"
+
 
 class DataValidator:
     """Validates clinical data quality across multiple dimensions."""
-    
+
     def __init__(self):
         self.required_fields = {
             "demographics.name": "high",
             "vital_signs": "medium"
         }
-    
+
     def validate_data_quality(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate patient data quality across four dimensions:
@@ -19,28 +24,29 @@ class DataValidator:
         - Validity (0-100)
         - Consistency (0-100)
         - Timeliness (0-100)
-        
+
         Returns a detailed quality assessment.
         """
         issues = []
-        
+
         # Check completeness
         completeness_score, completeness_issues = self._check_completeness(data)
         issues.extend(completeness_issues)
-        
+
         # Check validity
         validity_score, validity_issues = self._check_validity(data)
         issues.extend(validity_issues)
-        
+
         # Check consistency
         consistency_score, consistency_issues = self._check_consistency(data)
         issues.extend(consistency_issues)
-        
+
         # Check timeliness
         timeliness_score, timeliness_issues = self._check_timeliness(data)
         issues.extend(timeliness_issues)
-        
-        # Calculate overall score with stronger emphasis on completeness
+
+        # Governing: SPEC-0003 REQ "Overall Score Formula"
+        # overall_score = (avg_dimensions × 0.30) + (completeness × 0.70), clamped to [0, 100]
         base_average = (completeness_score + validity_score + consistency_score + timeliness_score) / 4
         overall_score = (base_average * 0.3) + (completeness_score * 0.7)
 
@@ -73,7 +79,9 @@ class DataValidator:
     def _check_completeness(self, data: Dict[str, Any]) -> tuple:
         """
         Check for missing required fields.
-        Score: 100 - (5 * number of missing critical fields)
+
+        Governing: SPEC-0003 REQ "Completeness Dimension"
+        Score starts at 100; each missing field subtracts a fixed penalty.
         """
         issues = []
         missing_critical = 0
@@ -178,6 +186,9 @@ class DataValidator:
     def _check_validity(self, data: Dict[str, Any]) -> tuple:
         """
         Check for invalid data formats and values.
+
+        Governing: SPEC-0003 REQ "Validity Dimension"
+        Score starts at 100; each invalid field subtracts a fixed penalty.
         """
         issues = []
         
@@ -249,7 +260,8 @@ class DataValidator:
         
         hr = vitals.get("heart_rate")
         if hr is not None:
-            if not isinstance(hr, int) or hr < 30 or hr > 200:
+            # Accept both int and float (Marshmallow deserializes heart_rate as Float)
+            if not isinstance(hr, (int, float)) or isinstance(hr, bool) or hr < 30 or hr > 200:
                 issues.append(Issue(
                     field="vital_signs.heart_rate",
                     issue=f"Heart rate value {hr} is outside normal range (30-200)",
@@ -293,6 +305,9 @@ class DataValidator:
     def _check_consistency(self, data: Dict[str, Any]) -> tuple:
         """
         Check for internal data consistency.
+
+        Governing: SPEC-0003 REQ "Consistency Dimension"
+        Score starts at 100; each inconsistency subtracts 15.
         """
         issues = []
         
@@ -350,6 +365,9 @@ class DataValidator:
     def _check_timeliness(self, data: Dict[str, Any]) -> tuple:
         """
         Check how recent the data is.
+
+        Governing: SPEC-0003 REQ "Timeliness Dimension"
+        Missing last_updated defaults to score=50 (neutral, medium severity).
         """
         issues = []
         
