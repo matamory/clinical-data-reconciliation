@@ -13,6 +13,7 @@ class MedicationReconciliation:
     def __init__(self):
         self.uncertainty_threshold = 0.5
     
+    # Governing: SPEC-0002 REQ "Deterministic Scoring", ADR-0002
     def deterministic_score(
         self,
         candidate: Dict[str, Any],
@@ -211,10 +212,9 @@ class MedicationReconciliation:
             if egfr <= 45:
                 if daily_dose_mg <= 1000:
                     score = 1.0
-                elif daily_dose_mg <= 1500:
-                    score = 0.65
                 else:
-                    score = 0.2
+                    # Governing: SPEC-0002 REQ "Deterministic Scoring" — any dose >1000 mg with eGFR ≤ 45 MUST score < 0.5
+                    score = 0.35
             elif egfr < 60:
                 if daily_dose_mg <= 2000:
                     score = 0.9
@@ -258,6 +258,7 @@ class MedicationReconciliation:
             sources
         )
         
+        # Governing: SPEC-0002 REQ "Hybrid Score Combination" — set llm=det to avoid first-source bias
         # Assign LLM scores.
         # If LLM is unavailable (fallback), keep scoring deterministic to avoid first-source bias.
         llm_unavailable = llm_result.get("model_used") in {"fallback", "local-heuristic"}
@@ -269,6 +270,7 @@ class MedicationReconciliation:
             else:
                 score_obj["llm_score"] = 0.3  # Lower score for non-matching
         
+        # Governing: SPEC-0002 REQ "Hybrid Score Combination", ADR-0002
         # Calculate hybrid scores and confidence
         for score_obj in candidate_scores:
             det = score_obj.get("deterministic_score", 0.5)
