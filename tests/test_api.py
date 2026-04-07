@@ -403,6 +403,129 @@ class TestValidationAPI:
         bp_issues = [i for i in data["issues_detected"] if i["field"] == "vital_signs.blood_pressure"]
         assert len(bp_issues) > 0
 
+    def test_future_dob_reduces_validity_by_20_high_severity(self):
+        """Governing: SPEC-0003 REQ "Validity Dimension" — future DOB MUST reduce validity by 20, severity high."""
+        payload = {
+            "demographics": {
+                "name": "Test Patient",
+                "dob": "2099-01-01",  # Far future date
+                "gender": "male"
+            },
+            "medications": ["Aspirin 81mg"],
+            "allergies": ["Penicillin"],
+            "conditions": ["Hypertension"],
+            "vital_signs": {
+                "blood_pressure": "120/80",
+                "heart_rate": 72,
+                "temperature": 37.0,
+                "respiratory_rate": None
+            },
+            "last_updated": "2026-04-01"  # Recent — avoids timeliness noise
+        }
+
+        response = client.post("/api/validate/data-quality", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+
+        # Validity must be reduced by exactly 20 for future DOB (only validity issue in this payload)
+        assert data["breakdown"]["validity"] == 80
+        validity_dob_issues = [
+            i for i in data["issues_detected"]
+            if i["field"] == "demographics.dob" and "future" in i["issue"].lower()
+        ]
+        assert len(validity_dob_issues) > 0
+        assert validity_dob_issues[0]["severity"] == "high"
+
+    def test_missing_last_updated_timeliness_is_50_medium(self):
+        """Governing: SPEC-0003 REQ "Timeliness Dimension" — missing last_updated MUST yield timeliness=50, medium severity."""
+        payload = {
+            "demographics": {
+                "name": "Test Patient",
+                "dob": "1975-05-15",
+                "gender": "female"
+            },
+            "medications": ["Metformin 500mg"],
+            "allergies": ["Penicillin"],
+            "conditions": ["Type 2 Diabetes"],
+            "vital_signs": {
+                "blood_pressure": "120/80",
+                "heart_rate": 72,
+                "temperature": 37.0,
+                "respiratory_rate": None
+            }
+            # last_updated intentionally absent
+        }
+
+        response = client.post("/api/validate/data-quality", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["breakdown"]["timeliness"] == 50
+        timeliness_issues = [i for i in data["issues_detected"] if i["field"] == "last_updated"]
+        assert len(timeliness_issues) > 0
+        assert timeliness_issues[0]["severity"] == "medium"
+
+    def test_diabetes_without_medication_reduces_consistency(self):
+        """Governing: SPEC-0003 REQ "Consistency Dimension" — diabetes condition with no diabetes med MUST reduce consistency by 15."""
+        payload = {
+            "demographics": {
+                "name": "Test Patient",
+                "dob": "1960-03-10",
+                "gender": "male"
+            },
+            "medications": ["Lisinopril 10mg"],  # No diabetes medication
+            "allergies": ["Penicillin"],
+            "conditions": ["Type 2 Diabetes", "Hypertension"],
+            "vital_signs": {
+                "blood_pressure": "130/80",
+                "heart_rate": 72,
+                "temperature": 37.0,
+                "respiratory_rate": None
+            },
+            "last_updated": "2024-03-24"
+        }
+
+        response = client.post("/api/validate/data-quality", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["breakdown"]["consistency"] == 85  # 100 − 15
+        med_issues = [i for i in data["issues_detected"] if i["field"] == "medications"]
+        assert len(med_issues) > 0
+        assert med_issues[0]["severity"] == "low"
+
+    def test_overall_score_formula_is_completeness_weighted(self):
+        """Governing: SPEC-0003 REQ "Overall Score Formula" — overall = (avg × 0.30) + (completeness × 0.70).
+
+        Verifies: completeness=0, validity=100, consistency=100, timeliness=100
+        MUST yield overall = (75 × 0.30) + (0 × 0.70) = 22, not the naive average of 75.
+        """
+        # Use a payload with all required fields missing to drive completeness toward 0,
+        # and recent last_updated to keep timeliness=100.
+        payload = {
+            "demographics": {},
+            "medications": [],
+            "allergies": [],
+            "conditions": [],
+            "vital_signs": None,
+            "last_updated": "2026-04-01"  # Recent — timeliness = 100
+        }
+
+        response = client.post("/api/validate/data-quality", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify the formula is applied: overall = int((avg * 0.30) + (completeness * 0.70))
+        breakdown = data["breakdown"]
+        avg = (breakdown["completeness"] + breakdown["validity"] +
+               breakdown["consistency"] + breakdown["timeliness"]) / 4
+        expected = int((avg * 0.30) + (breakdown["completeness"] * 0.70))
+        assert data["overall_score"] == expected
+
+        # The overall score MUST be dominated by completeness, not a naive average.
+        # With completeness well below 100 and other dimensions higher, overall < avg.
+        assert data["overall_score"] < avg
+
 
 class TestAPIIntegration:
     """Integration tests for full workflow."""
