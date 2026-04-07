@@ -1,5 +1,5 @@
+// Governing: SPEC-0001 REQ "DaisyUI Component Integration", SPEC-0001 REQ "Frontend–Backend API Proxy"
 import React, { useState } from 'react';
-import './ReconciliationForm.css';
 
 function ReconciliationForm() {
   const [formData, setFormData] = useState({
@@ -14,19 +14,13 @@ function ReconciliationForm() {
 
   const handleFieldChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSourceChange = (index, field, value) => {
     const newSources = [...formData.sources];
     newSources[index][field] = value;
-    setFormData(prev => ({
-      ...prev,
-      sources: newSources
-    }));
+    setFormData(prev => ({ ...prev, sources: newSources }));
   };
 
   const addSource = () => {
@@ -60,11 +54,7 @@ function ReconciliationForm() {
             const parts = lab.trim().split(':');
             return {
               name: parts[0] || '',
-              value: {
-                text_value: parts[1] || null,
-                numeric_value: null,
-                unit: parts[2] || null
-              }
+              value: { text_value: parts[1] || null, numeric_value: null, unit: parts[2] || null }
             };
           }).filter(l => l.name)
         },
@@ -77,201 +67,214 @@ function ReconciliationForm() {
         })).filter(s => s.system && s.medication)
       };
 
-      const response = await fetch('http://localhost:8000/api/reconcile/medication', {
+      // Governing: SPEC-0001 REQ "Frontend–Backend API Proxy" — uses CRA proxy (localhost:5000)
+      const response = await fetch('/api/reconcile/medication', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setResult(data);
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
+      setResult(await response.json());
     } catch (err) {
-      setError(`Error: ${err.message}`);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  // Governing: SPEC-0001 REQ "DaisyUI Component Integration" — confidence → progress/stat, safety → badge/alert
+  const confidencePct = result ? Math.round(result.confidence_score * 100) : 0;
+  const confidenceColor = confidencePct > 75 ? 'progress-success' : confidencePct > 50 ? 'progress-warning' : 'progress-error';
+
+  const safetyAlertClass = {
+    PASSED: 'alert-success',
+    FAILED: 'alert-error',
+    REVIEW_REQUIRED: 'alert-warning',
+  }[result?.clinical_safety_check] || 'alert-info';
+
+  const safetyBadgeClass = {
+    PASSED: 'badge-success',
+    FAILED: 'badge-error',
+    REVIEW_REQUIRED: 'badge-warning',
+  }[result?.clinical_safety_check] || 'badge-ghost';
+
   return (
-    <div className="form-container">
-      <div className="form-section">
-        <h2>Medication Reconciliation</h2>
-        <p className="form-description">
-          Enter patient information and medication sources from different systems for reconciliation.
-        </p>
+    <div className="space-y-6">
+      <div className="card bg-base-100 shadow">
+        <div className="card-body">
+          <h2 className="card-title text-xl">Medication Reconciliation</h2>
+          <p className="text-base-content/70">
+            Enter patient information and medication sources from different systems for reconciliation.
+          </p>
 
-        <form onSubmit={handleSubmit} className="reconciliation-form">
-          <div className="form-group patient-info">
-            <h3>Patient Information</h3>
-            
-            <div className="input-row">
-              <div className="input-field">
-                <label htmlFor="age">Age</label>
-                <input
-                  type="number"
-                  id="age"
-                  name="age"
-                  value={formData.age}
-                  onChange={handleFieldChange}
-                  placeholder="e.g., 45"
-                />
+          <form onSubmit={handleSubmit} className="space-y-6 mt-2">
+            {/* Patient Information */}
+            <div>
+              <h3 className="font-semibold text-lg mb-3">Patient Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="form-control">
+                  <label className="label"><span className="label-text">Age</span></label>
+                  <input
+                    type="number"
+                    name="age"
+                    className="input input-bordered"
+                    value={formData.age}
+                    onChange={handleFieldChange}
+                    placeholder="e.g., 45"
+                  />
+                </div>
+                <div className="form-control">
+                  <label className="label"><span className="label-text">Conditions</span></label>
+                  <input
+                    type="text"
+                    name="conditions"
+                    className="input input-bordered"
+                    value={formData.conditions}
+                    onChange={handleFieldChange}
+                    placeholder="e.g., Hypertension, Type 2 Diabetes"
+                  />
+                </div>
               </div>
-
-              <div className="input-field">
-                <label htmlFor="conditions">Conditions</label>
-                <input
-                  type="text"
-                  id="conditions"
-                  name="conditions"
-                  value={formData.conditions}
+              <div className="form-control mt-4">
+                <label className="label"><span className="label-text">Recent Labs (name:value:unit)</span></label>
+                <textarea
+                  name="recentLabs"
+                  className="textarea textarea-bordered"
+                  value={formData.recentLabs}
                   onChange={handleFieldChange}
-                  placeholder="e.g., Hypertension, Type 2 Diabetes"
+                  placeholder="e.g., HbA1c:7.2:%, BP:120/80:mmHg"
+                  rows={3}
                 />
               </div>
             </div>
 
-            <div className="input-field">
-              <label htmlFor="recentLabs">Recent Labs (format: name:value:unit)</label>
-              <textarea
-                id="recentLabs"
-                name="recentLabs"
-                value={formData.recentLabs}
-                onChange={handleFieldChange}
-                placeholder="e.g., HbA1c:7.2:%, BP:120/80:mmHg"
-                rows="3"
-              />
-            </div>
-          </div>
-
-          <div className="form-group sources-info">
-            <h3>Medication Sources</h3>
-            
-            {formData.sources.map((source, index) => (
-              <div key={index} className="source-card">
-                <div className="source-header">
-                  <h4>Source {index + 1}</h4>
-                  {formData.sources.length > 1 && (
-                    <button
-                      type="button"
-                      className="remove-btn"
-                      onClick={() => removeSource(index)}
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-
-                <div className="input-row">
-                  <div className="input-field">
-                    <label>System</label>
-                    <input
-                      type="text"
-                      value={source.system}
-                      onChange={(e) => handleSourceChange(index, 'system', e.target.value)}
-                      placeholder="e.g., Hospital EMR, Pharmacy System"
-                    />
+            {/* Medication Sources */}
+            <div>
+              <h3 className="font-semibold text-lg mb-3">Medication Sources</h3>
+              <div className="space-y-4">
+                {formData.sources.map((source, index) => (
+                  <div key={index} className="card bg-base-200">
+                    <div className="card-body p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="font-medium">Source {index + 1}</h4>
+                        {formData.sources.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs text-error"
+                            onClick={() => removeSource(index)}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="form-control">
+                          <label className="label"><span className="label-text">System</span></label>
+                          <input
+                            type="text"
+                            className="input input-bordered input-sm"
+                            value={source.system}
+                            onChange={(e) => handleSourceChange(index, 'system', e.target.value)}
+                            placeholder="e.g., Hospital EMR"
+                          />
+                        </div>
+                        <div className="form-control">
+                          <label className="label"><span className="label-text">Medication</span></label>
+                          <input
+                            type="text"
+                            className="input input-bordered input-sm"
+                            value={source.medication}
+                            onChange={(e) => handleSourceChange(index, 'medication', e.target.value)}
+                            placeholder="e.g., Metformin 500mg"
+                          />
+                        </div>
+                        <div className="form-control">
+                          <label className="label"><span className="label-text">Last Updated</span></label>
+                          <input
+                            type="date"
+                            className="input input-bordered input-sm"
+                            value={source.lastUpdated}
+                            onChange={(e) => handleSourceChange(index, 'lastUpdated', e.target.value)}
+                          />
+                        </div>
+                        <div className="form-control">
+                          <label className="label"><span className="label-text">Reliability</span></label>
+                          <select
+                            className="select select-bordered select-sm"
+                            value={source.reliability}
+                            onChange={(e) => handleSourceChange(index, 'reliability', e.target.value)}
+                          >
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-
-                  <div className="input-field">
-                    <label>Medication</label>
-                    <input
-                      type="text"
-                      value={source.medication}
-                      onChange={(e) => handleSourceChange(index, 'medication', e.target.value)}
-                      placeholder="e.g., Metformin 500mg"
-                    />
-                  </div>
-                </div>
-
-                <div className="input-row">
-                  <div className="input-field">
-                    <label>Last Updated</label>
-                    <input
-                      type="date"
-                      value={source.lastUpdated}
-                      onChange={(e) => handleSourceChange(index, 'lastUpdated', e.target.value)}
-                    />
-                  </div>
-
-                  <div className="input-field">
-                    <label>Reliability</label>
-                    <select
-                      value={source.reliability}
-                      onChange={(e) => handleSourceChange(index, 'reliability', e.target.value)}
-                    >
-                      <option value="high">High</option>
-                      <option value="medium">Medium</option>
-                      <option value="low">Low</option>
-                    </select>
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
+              <button type="button" className="btn btn-outline btn-sm mt-3" onClick={addSource}>
+                + Add Another Source
+              </button>
+            </div>
 
-            <button type="button" className="add-source-btn" onClick={addSource}>
-              + Add Another Source
+            <button type="submit" className="btn btn-primary w-full" disabled={loading}>
+              {loading ? <span className="loading loading-spinner loading-sm"></span> : null}
+              {loading ? 'Reconciling...' : 'Reconcile Medication'}
             </button>
-          </div>
-
-          <button type="submit" className="submit-btn" disabled={loading}>
-            {loading ? 'Reconciling...' : 'Reconcile Medication'}
-          </button>
-        </form>
+          </form>
+        </div>
       </div>
 
       {error && (
-        <div className="error-message">
-          <strong>Error:</strong> {error}
+        <div className="alert alert-error">
+          <span><strong>Error:</strong> {error}</span>
         </div>
       )}
 
       {result && (
-        <div className="result-section">
-          <h2>Reconciliation Result</h2>
-          
-          <div className="result-card">
-            <div className="result-header">
-              <h3>{result.reconciled_medication || 'Unknown'}</h3>
-              <div className="confidence-badge" style={{
-                backgroundColor: result.confidence_score > 0.75 ? '#48bb78' : 
-                               result.confidence_score > 0.5 ? '#ed8936' : '#f56565'
-              }}>
-                {Math.round(result.confidence_score * 100)}% Confidence
+        <div className="card bg-base-100 shadow">
+          <div className="card-body">
+            <h2 className="card-title text-xl">Reconciliation Result</h2>
+
+            {/* Confidence — DaisyUI stat + progress */}
+            <div className="stats shadow w-full mb-4">
+              <div className="stat">
+                <div className="stat-title">Reconciled Medication</div>
+                <div className="stat-value text-lg">{result.reconciled_medication || 'Unknown'}</div>
+              </div>
+              <div className="stat">
+                <div className="stat-title">Confidence Score</div>
+                <div className="stat-value text-2xl">{confidencePct}%</div>
+                <div className="stat-desc mt-1">
+                  <progress className={`progress ${confidenceColor} w-full`} value={confidencePct} max="100"></progress>
+                </div>
               </div>
             </div>
 
-            <div className="result-row">
-              <div className="result-item">
-                <h4>Safety Check</h4>
-                <p className={`safety-${result.clinical_safety_check.toLowerCase()}`}>
-                  {result.clinical_safety_check}
-                </p>
-              </div>
+            {/* Safety Check — DaisyUI badge + alert */}
+            <div className={`alert ${safetyAlertClass} mb-4`}>
+              <span className="font-semibold">Safety Check:</span>
+              <span className={`badge ${safetyBadgeClass} ml-2`}>{result.clinical_safety_check}</span>
             </div>
 
-            <div className="result-row">
-              <div className="result-item">
-                <h4>Reasoning</h4>
-                <p>{result.reasoning}</p>
+            {result.reasoning && (
+              <div className="mb-4">
+                <h4 className="font-semibold mb-1">Reasoning</h4>
+                <p className="text-base-content/80">{result.reasoning}</p>
               </div>
-            </div>
+            )}
 
             {result.recommended_actions && result.recommended_actions.length > 0 && (
-              <div className="result-row">
-                <div className="result-item">
-                  <h4>Recommended Actions</h4>
-                  <ul>
-                    {result.recommended_actions.map((action, idx) => (
-                      <li key={idx}>{action}</li>
-                    ))}
-                  </ul>
-                </div>
+              <div>
+                <h4 className="font-semibold mb-2">Recommended Actions</h4>
+                <ul className="list-disc list-inside space-y-1">
+                  {result.recommended_actions.map((action, idx) => (
+                    <li key={idx} className="text-base-content/80">{action}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
