@@ -1,14 +1,39 @@
 import pytest
-from fastapi.testclient import TestClient
 import sys
 import os
 
-# Add backend to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+# Add project root to path so `backend` is importable as a package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from main import app
+from backend import create_app
 
-client = TestClient(app)
+
+class _ResponseWrapper:
+    """Wraps a Flask test response to expose .json() as a callable method,
+    matching the interface used by the existing test suite."""
+
+    def __init__(self, resp):
+        self._resp = resp
+        self.status_code = resp.status_code
+
+    def json(self):
+        return self._resp.get_json()
+
+
+class _FlaskTestClient:
+    """Thin wrapper around Flask's built-in test client."""
+
+    def __init__(self, app):
+        self._client = app.test_client()
+
+    def get(self, url, **kwargs):
+        return _ResponseWrapper(self._client.get(url, **kwargs))
+
+    def post(self, url, json=None, **kwargs):
+        return _ResponseWrapper(self._client.post(url, json=json, **kwargs))
+
+
+client = _FlaskTestClient(create_app("testing"))
 
 
 class TestReconciliationAPI:

@@ -6,9 +6,9 @@ Flask-CORS==4.0.0
 flask-smorest==0.44.0
 marshmallow==3.21.3
 
-# Kept until route migration in story #13 (issue #13)
-FastAPI==0.104.1
-uvicorn==0.24.0
+# pydantic is a direct dependency: backend/pydantic_models.py and the service
+# modules import from it at runtime. It also arrives transitively via openai,
+# but declaring it explicitly ensures a clean install succeeds independently.
 pydantic==2.5.0
 
 # Shared

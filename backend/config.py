@@ -22,6 +22,14 @@ class Config:
     HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")
     PORT: int = int(os.getenv("BACKEND_PORT", "5000"))
 
+    # OpenAPI / flask-smorest (Governing: SPEC-0001 REQ "OpenAPI Documentation")
+    API_TITLE: str = "Clinical Data Reconciliation Engine"
+    API_VERSION: str = "v1"
+    OPENAPI_VERSION: str = "3.0.3"
+    OPENAPI_URL_PREFIX: str = "/"
+    OPENAPI_SWAGGER_UI_PATH: str = "/docs"
+    OPENAPI_SWAGGER_UI_URL: str = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
+
 
 class DevelopmentConfig(Config):
     DEBUG: bool = os.getenv("BACKEND_DEBUG", "False").lower() == "true"

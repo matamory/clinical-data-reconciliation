@@ -1,5 +1,5 @@
-from ai_service.llm import llm_scoring, LLMScorer
-from models import PatientRecord, SourceRecord, SourceReliability, PatientContext, Lab, LabValue, ReconciliationResult, SafetyCheck
+from ..ai_service.llm import llm_scoring, LLMScorer
+from ..pydantic_models import PatientRecord, SourceRecord, SourceReliability, PatientContext, Lab, LabValue, ReconciliationResult, SafetyCheck
 from typing import List, Dict, Optional, Any
 from datetime import date, datetime
 from collections import Counter

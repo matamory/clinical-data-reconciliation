@@ -1,6 +1,6 @@
 from typing import Dict, List, Any, Optional
 from datetime import datetime, date
-from models import Issue, Severity
+from ..pydantic_models import Issue, Severity
 
 
 class DataValidator:
