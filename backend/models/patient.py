@@ -27,14 +27,20 @@ class Patient(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     # Relationships
+    # Medications are owned by the patient — cascade delete is appropriate.
     medications = db.relationship(
         "Medication", back_populates="patient", cascade="all, delete-orphan"
     )
+    # Result rows use SET NULL on the FK (not CASCADE) so clinical audit history
+    # is preserved when a patient record is deleted.  ORM cascade must NOT include
+    # "delete" or "delete-orphan" here or SQLAlchemy will delete the rows before
+    # the DB-level SET NULL fires, destroying the audit trail.
+    # Governing: design.md HIPAA requirement "audit trails must be maintained"
     reconciliation_results = db.relationship(
-        "ReconciliationResult", back_populates="patient", cascade="all, delete-orphan"
+        "ReconciliationResult", back_populates="patient"
     )
     data_quality_results = db.relationship(
-        "DataQualityResult", back_populates="patient", cascade="all, delete-orphan"
+        "DataQualityResult", back_populates="patient"
     )
 
     def __repr__(self) -> str:
