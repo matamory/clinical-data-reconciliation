@@ -1,0 +1,17 @@
+Flask-Migrate (Alembic) migration directory.
+
+After installing dependencies, initialise or apply migrations with:
+
+    # First time only (if env.py is missing):
+    flask db init
+
+    # Generate a migration from model changes:
+    flask db migrate -m "description"
+
+    # Apply all pending migrations:
+    flask db upgrade
+
+    # Roll back one revision:
+    flask db downgrade
+
+Governing: SPEC-0001 REQ "SQLAlchemy ORM Data Layer", ADR-0001
