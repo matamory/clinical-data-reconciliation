@@ -1,443 +1,235 @@
 # Clinical Data Reconciliation Engine
 
-A comprehensive EHR (Electronic Health Record) integration system that reconciles medication data from multiple sources and validates clinical data quality using hybrid scoring algorithms combining deterministic metrics with LLM-powered reasoning.
+A clinical medication reconciliation engine that compares medication records from multiple EHR sources (EMR, pharmacy, patient reports) and validates healthcare data quality. Uses a **hybrid 60/40 scoring model**: 60% deterministic heuristics + 40% OpenAI GPT-3.5-turbo reasoning to produce reconciliation recommendations with confidence scores and drug-condition safety checks.
 
-## Architecture Overview
+## Architecture
 
-**Architecture Pattern**: 3-tier modular monolithic with clear separation of concerns:
-- **Presentation Layer**: React components handling UI/UX
-- **Business Logic Layer**: Domain-specific services (reconciliation, validation)
-- **AI Service Layer**: LLM integration with fallback mechanisms
-- **Data Models**: Pydantic models for validation and typing
+**Backend**: Flask + SQLAlchemy + Flask-Migrate (port 5000)
+**Frontend**: React (port 3000)
+**AI**: OpenAI GPT-3.5-turbo with local heuristic fallback
+**Database**: SQLite (default) or PostgreSQL via `DATABASE_URL`
 
-## Features
+### Backend services
 
-### 1. Medication Reconciliation
-- **Hybrid Scoring Algorithm**: Combines deterministic metrics (60%) with LLM reasoning (40%)
-- **Multi-source Support**: Reconciles medications from multiple sources (EMR, pharmacy, patient)
-- **Confidence Scoring**: 4-factor confidence calculation (quality, separation, agreement, uncertainty)
-- **Uncertainty Detection**: Identifies conflicting sources and incomplete data
-- **Safety Validation**: LLM-powered safety checks against patient conditions
-- **Recommended Actions**: Provides actionable reconciliation guidance
+| Module | Purpose |
+|--------|---------|
+| `backend/api/` | Flask blueprints — reconciliation, validation, health |
+| `backend/reconcilation_service/reconcile_meds.py` | Hybrid 60/40 scoring, confidence calculation, safety checks |
+| `backend/validation_service/data_validator.py` | 4-dimension data quality scoring (0–100 per dimension) |
+| `backend/ai_service/llm.py` | OpenAI GPT-3.5-turbo wrapper with heuristic fallback |
+| `backend/models/` | SQLAlchemy ORM models (Patient, Medication, ReconciliationResult, DataQualityResult) |
+| `backend/schemas.py` | Marshmallow request/response schemas |
 
-**Scoring Formula**:
+### Scoring formulas
+
 ```
-Deterministic Score = (reliability × 0.4) + (recency × 0.3) + (agreement × 0.3)
-Recency Score = max(0, 1 - (days_old / 30)) with exponential decay
-Hybrid Score = (deterministic × 0.6) + (llm × 0.4)
-Confidence = quality + separation + agreement - uncertainty_penalty
+Deterministic score = (reliability × 0.30) + (recency × 0.30) + (agreement × 0.15) + (clinical_appropriateness × 0.25)
+Recency score       = exp decay relative to newest source (30-day half-life)
+Hybrid score        = (deterministic × 0.6) + (llm × 0.4)
+Confidence          = (quality × 0.7) + (separation × 0.1) + (det_llm_agreement × 0.2)
 ```
 
-### 2. Data Quality Validation
-- **4-Dimension Assessment**:
-  - **Completeness**: Checks for required fields (0-100)
-  - **Validity**: Format and range validation (0-100)
-  - **Consistency**: Logic validation (0-100)
-  - **Timeliness**: Data freshness assessment (0-100)
-- **Severity Classification**: High/Medium/Low issue categorization
-- **Status Levels**: EXCELLENT (≥90), GOOD (≥75), ACCEPTABLE (≥60), POOR (≥40), CRITICAL (<40)
-- **Issue Detection**: Identifies specific problems with actionable insights
+If `OPENAI_API_KEY` is absent or the API call fails, the LLM score is replaced by a local heuristic — the engine remains fully functional.
 
-**Validation Criteria**:
-- Completeness: -5 points per missing critical field (max 100)
-- Validity: -10 points per invalid field (DOB, gender, vitals, temp)
-- Consistency: -15 points per inconsistency (negative age, missing medications for conditions)
-- Timeliness: Based on last_updated (recent=100, >1yr=0)
-
-### 3. LLM Integration
-- **OpenAI GPT-3.5-turbo**: Primary model for clinical reasoning
-- **Fallback Mechanism**: Default scores (0.5) if API fails
-- **Structured Output**: JSON parsing for reliable extraction
-- **Clinical Context**: Prompt engineering with patient conditions, allergies, labs
-- **Safety Validation**: Identifies potential drug-condition conflicts
-- **API Key Management**: Secure environment variable configuration
-
-## Installation & Setup
+## Setup
 
 ### Prerequisites
-- Python 3.8+ (backend)
-- Node.js 14+ (frontend)
-- OpenAI API key (get from https://platform.openai.com/api-keys)
-- pip (Python package manager)
-- npm (Node package manager)
 
-### Backend Setup
+- Python 3.8+
+- Node.js 14+
+- pip and npm
 
-```bash
-# 1. Navigate to backend directory
-cd backend
-
-# 2. Create a Python virtual environment
-python -m venv venv
-
-# 3. Activate virtual environment
-# On macOS/Linux:
-source venv/bin/activate
-# On Windows:
-# venv\Scripts\activate
-
-# 4. Install Python dependencies
-pip install -r requirements.txt
-
-# 5. Configure environment variables
-# Edit .env file and add your OpenAI API key:
-# OPENAI_API_KEY=sk-your-real-api-key-here
-
-# 6. Run the backend server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Frontend Setup
-
-```bash
-# 1. Navigate to frontend directory
-cd frontend
-
-# 2. Install Node dependencies
-npm install
-
-# 3. Start the development server
-npm start
-# Frontend will open at http://localhost:3000
-```
-
-### Running Tests
+### Backend
 
 ```bash
 # From project root
+python -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+cp .env.example backend/.env
+# Edit backend/.env and set OPENAI_API_KEY (optional — falls back to heuristics)
+
+flask --app backend db upgrade    # creates SQLite DB and applies migrations
+flask --app backend run --port 5000 --reload
+# OpenAPI docs: http://localhost:5000/docs
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm start
+# Opens at http://localhost:3000, proxies API calls to localhost:5000
+```
+
+## Running tests
+
+Tests use Flask's test client with an in-memory SQLite database — the backend server does **not** need to be running.
+
+```bash
+source venv/bin/activate
 pytest tests/test_api.py -v
 
-# Run specific test class
+# Single test class
 pytest tests/test_api.py::TestReconciliationAPI -v
-
-# Run with coverage
-pytest tests/test_api.py --cov=backend --cov-report=html
+pytest tests/test_api.py::TestValidationAPI -v
 ```
 
-## API Endpoints
+## API endpoints
 
-### Health Check
-```http
-GET /health
-```
-Response: `{"status": "healthy"}`
+### `GET /health`
 
-### Medication Reconciliation
-```http
-POST /api/reconcile/medication
-Content-Type: application/json
-
-{
-  "patient_id": "P001",
-  "patient_age": 65,
-  "known_conditions": ["hypertension", "diabetes"],
-  "current_labs": {"glucose": 145, "creatinine": 1.2},
-  "medication_sources": [
-    {
-      "source": "EMR",
-      "medications": [{"name": "Lisinopril", "dose": "10mg", "frequency": "daily"}],
-      "data_date": "2024-03-24",
-      "reliability": 0.95
-    }
-  ]
-}
+```json
+{"status": "healthy"}
 ```
 
-Response: 
+### `POST /api/reconcile/medication`
+
+**Request**
 ```json
 {
-  "patient_id": "P001",
-  "reconciled_medication": {
-    "name": "Lisinopril",
-    "dose": "10mg",
-    "frequency": "daily"
+  "patient_context": {
+    "age": 65,
+    "conditions": ["Type 2 Diabetes", "CKD Stage 3"],
+    "recent_labs": [
+      {"name": "eGFR", "value": {"numeric_value": 42, "unit": "mL/min"}}
+    ]
   },
-  "confidence_score": 0.87,
-  "confidence_breakdown": {
-    "overall": 0.87,
-    "quality": 0.38,
-    "separation": 0.26,
-    "agreement": 0.18,
-    "uncertainty": {
-      "sources_conflict": false,
-      "missing_data": false,
-      "total_uncertainty": 0.0
+  "sources": [
+    {
+      "system": "EMR",
+      "medication": "Metformin 500mg",
+      "last_updated": "2026-03-15",
+      "source_reliability": "high"
+    },
+    {
+      "system": "Pharmacy",
+      "medication": "Metformin 1000mg",
+      "last_filled": "2026-02-01",
+      "source_reliability": "medium"
     }
-  },
-  "safety_check": "PASSED",
-  "safety_message": "No contraindications detected",
-  "recommended_actions": [
-    "Confirm Lisinopril continuation with prescriber"
   ]
 }
 ```
 
-### Data Quality Validation
-```http
-POST /api/validate/data-quality
-Content-Type: application/json
-
+**Response**
+```json
 {
-  "patient_name": "John Doe",
-  "date_of_birth": "1959-03-24",
-  "gender": "M",
+  "reconciled_medication": "Metformin 500mg",
+  "confidence_score": 0.74,
+  "clinical_safety_check": "REVIEW_REQUIRED",
+  "reasoning": "eGFR of 42 warrants dose reduction per clinical guidelines...",
+  "recommended_actions": [
+    "Reduce Metformin dose for eGFR ≤ 45",
+    "Confirm with prescriber"
+  ],
+  "model_used": "gpt-3.5-turbo"
+}
+```
+
+`model_used` values: `"gpt-3.5-turbo"` | `"local-heuristic"` | `"fallback"`
+
+### `POST /api/validate/data-quality`
+
+**Request**
+```json
+{
+  "demographics": {"name": "Jane Doe", "dob": "1961-04-12", "gender": "F"},
   "medications": ["Lisinopril 10mg daily"],
   "allergies": ["Penicillin"],
-  "known_conditions": ["hypertension"],
-  "heart_rate": 72,
-  "blood_pressure": "140/85",
-  "temperature": 37.0,
-  "last_updated": "2024-03-24"
+  "conditions": ["Hypertension"],
+  "vital_signs": {"blood_pressure": "138/88", "heart_rate": 74, "temperature": 36.8},
+  "last_updated": "2026-04-01"
 }
 ```
 
-Response:
+**Response**
 ```json
 {
-  "overall_score": 88,
-  "status": "GOOD",
-  "dimensions": {
-    "completeness": {
-      "score": 100,
-      "description": "All required fields present"
-    },
-    "validity": {
-      "score": 100,
-      "description": "All values in valid ranges"
-    },
-    "consistency": {
-      "score": 95,
-      "description": "Consistent data across fields"
-    },
-    "timeliness": {
-      "score": 100,
-      "description": "Data is recent"
-    }
+  "overall_score": 91,
+  "breakdown": {
+    "completeness": 100,
+    "validity": 100,
+    "consistency": 95,
+    "timeliness": 100
   },
-  "issues_detected": [],
-  "recommendations": []
+  "issues_detected": []
 }
 ```
 
-## Data Models
+Interactive OpenAPI docs (Swagger UI) are available at `http://localhost:5000/docs` when the server is running.
 
-### PatientRecord
-```python
-{
-  "patient_id": str,
-  "patient_age": int,
-  "known_conditions": List[str],
-  "current_labs": Dict[str, float],
-  "medication_sources": List[MedicationSource]
-}
-```
+## Environment variables
 
-### MedicationSource
-```python
-{
-  "source": str,  # "EMR", "Pharmacy", "Patient"
-  "medications": List[Dict],
-  "data_date": str,  # ISO format
-  "reliability": float  # 0.0-1.0
-}
-```
+Create `backend/.env` (template at `.env.example`):
 
-### DataQualityInput
-```python
-{
-  "patient_name": str,
-  "date_of_birth": str,  # ISO format
-  "gender": str,
-  "medications": List[str],
-  "allergies": List[str],
-  "known_conditions": List[str],
-  "heart_rate": int,
-  "blood_pressure": str,
-  "temperature": float,
-  "last_updated": str  # ISO format
-}
-```
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `OPENAI_API_KEY` | OpenAI key for LLM scoring | *(none — falls back to heuristics)* |
+| `DATABASE_URL` | SQLAlchemy connection string | `sqlite:///cdre.db` |
+| `BACKEND_DEBUG` | Flask debug mode | `False` |
+| `BACKEND_HOST` | Bind host | `0.0.0.0` |
+| `BACKEND_PORT` | Bind port | `5000` |
 
-## Project Structure
+## Project structure
 
 ```
 ClinicalDataReconciliationEngine/
 ├── backend/
-│   ├── main.py                          # FastAPI application
-│   ├── models.py                        # Pydantic data models
-│   ├── requirements.txt                 # Python dependencies
-│   ├── .env                             # Environment variables (local)
+│   ├── __init__.py              # Flask app factory: create_app()
+│   ├── config.py                # Dev / Prod / Test config classes
+│   ├── schemas.py               # Marshmallow request/response schemas
+│   ├── pydantic_models.py       # Pydantic models used by service layer
+│   ├── api/                     # Flask blueprints
+│   │   ├── health.py
+│   │   ├── reconciliation.py
+│   │   └── validation.py
+│   ├── models/                  # SQLAlchemy ORM models
+│   │   ├── patient.py
+│   │   ├── medication.py
+│   │   └── reconciliation.py
+│   ├── reconcilation_service/   # Core reconciliation logic (note: intentional spelling)
+│   │   └── reconcile_meds.py
+│   ├── validation_service/
+│   │   └── data_validator.py
 │   ├── ai_service/
-│   │   ├── __init__.py
-│   │   └── llm.py                       # LLMScorer with OpenAI
-│   ├── reconcilation_service/
-│   │   ├── __init__.py
-│   │   └── reconcile_meds.py            # Reconciliation logic
-│   └── validation_service/
-│       ├── __init__.py
-│       └── data_validator.py            # Data quality validation
+│   │   └── llm.py
+│   └── migrations/              # Flask-Migrate / Alembic
 ├── frontend/
-│   ├── src/
-│   │   ├── index.js                     # React entry point
-│   │   ├── index.css                    # Global styles
-│   │   ├── App.js                       # Main component
-│   │   ├── App.css                      # App styling
-│   │   └── components/
-│   │       ├── ReconciliationForm.js    # Reconciliation UI
-│   │       ├── ReconciliationForm.css
-│   │       ├── ValidationForm.js        # Validation UI
-│   │       └── ValidationForm.css
-│   ├── public/
-│   │   └── index.html                   # HTML template
-│   └── package.json                     # Node dependencies
+│   └── src/
+│       ├── App.js
+│       └── components/
+│           ├── ReconciliationForm.js
+│           └── ValidationForm.js
 ├── tests/
-│   └── test_api.py                      # Pytest test suite
-├── .env.example                         # Environment template
-└── README.md                            # This file
+│   └── test_api.py
+├── docs/
+│   ├── adrs/                    # Architecture Decision Records
+│   └── openspec/specs/          # Specifications
+├── requirements.txt
+└── .env.example
 ```
 
-## Testing
+> **Note**: `reconcilation_service/` is intentionally misspelled (missing an 'i') — match this spelling in imports.
 
-The project includes comprehensive test coverage with 10+ test cases:
+## Security and privacy
 
-### Reconciliation Tests
-- Single source reconciliation
-- Multi-source conflict resolution
-- Recency-based scoring
-- Error handling for empty sources
+- PII (patient name, DOB, MRN) is **never sent to OpenAI** — HIPAA design constraint
+- API keys are loaded from environment variables only, never committed
+- CORS is enabled via Flask-CORS; restrict origins in production via `CORS_ORIGINS`
+- All inputs are validated via Marshmallow schemas before reaching service logic
 
-### Validation Tests
-- Complete data validation
-- Incomplete data detection
-- Invalid format detection
-- Stale data handling
+## Key dependencies
 
-### Integration Tests
-- Full workflow testing
-- End-to-end reconciliation and validation
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file in the backend directory:
-
-```env
-# Required
-OPENAI_API_KEY=sk-your-actual-api-key-here
-
-# Optional (defaults provided)
-BACKEND_DEBUG=False
-BACKEND_HOST=0.0.0.0
-BACKEND_PORT=8000
-```
-
-### Python Version Requirements
-
-```
-Python >= 3.8
-```
-
-### Key Dependencies
-
-- **FastAPI**: 0.104.1 (web framework)
-- **Uvicorn**: 0.24.0 (ASGI server)
-- **Pydantic**: 2.5.0 (data validation)
-- **OpenAI**: 1.3.0 (LLM integration)
-- **Python-dotenv**: 1.0.0 (environment config)
-- **Pytest**: 7.4.3 (testing)
-- **React**: 18.2.0 (frontend)
-- **React-scripts**: 5.0.1 (build tools)
-
-## Performance Considerations
-
-- **LLM Scoring Timeout**: 30 seconds default (configurable)
-- **Medication Caching**: In-memory for current session
-- **Concurrent Requests**: FastAPI handles async naturally
-- **Frontend Load**: ~200KB JS, optimized component re-renders
-
-## Security & Privacy
-
- **HIPAA-Safe Implementation**:
-- No sensitive patient identifiers stored in memory
-- Context-excluded from LLM prompts (no names, MRNs)
-- Secure API key management via environment variables
-- CORS middleware prevents unauthorized cross-origin requests
-- Input validation on all endpoints prevents injection attacks
-
- **Best Practices**:
-- Pydantic validation for all inputs
-- Error handling without exposing system details
-- Environment variable isolation for secrets
-- No credentials in version control (.env.example template only)
-
-## Development Workflow
-
-```bash
-# 1. Start backend (from backend directory)
-source venv/bin/activate
-uvicorn main:app --reload
-
-# 2. In another terminal, start frontend (from frontend directory)
-npm start
-
-# 3. In another terminal, run tests (from project root)
-pytest tests/test_api.py -v
-
-# 4. Frontend automatically opens at http://localhost:3000
-# Backend API available at http://localhost:8000
-```
-
-## Troubleshooting
-
-### OpenAI API Key Issues
-- Verify key format: `sk-` prefix with 48+ characters
-- Check API key has appropriate permissions
-- Ensure billing is active on OpenAI account
-- Try generating a new key from https://platform.openai.com/api-keys
-
-### Frontend Connection Issues
-- Ensure backend is running on port 8000
-- Check CORS is enabled in FastAPI
-- Verify proxy setting in `frontend/package.json`
-- Clear browser cache if needed
-
-### Test Failures
-- Ensure OpenAI API key is set in `.env`
-- Check backend is not running (tests use test client)
-- Verify Python environment is activated
-- Run with `-v` flag for detailed output: `pytest tests/test_api.py -v`
-
-## Future Enhancements
-
-- [ ] Database persistence (PostgreSQL)
-- [ ] User authentication & authorization
-- [ ] Advanced audit logging
-- [ ] Real-time reconciliation streaming
-- [ ] Mobile application
-- [ ] Integration with external EMR systems
-- [ ] Machine learning model fine-tuning
-- [ ] Advanced analytics dashboard
-
-## License
-
-This project implements requirements from clinical data reconciliation assessment.
-
-## Support
-
-For issues or questions:
-1. Check the troubleshooting section above
-2. Review test cases for usage examples
-3. Verify environment configuration
-4. Check backend logs for API errors
-
----
-
-**Implementation Status**:  Complete
--  3-tier architecture
--  Hybrid scoring algorithm
--  React frontend
--  OpenAI LLM integration
--  Comprehensive test suite
--  API endpoints
--  HIPAA-safe practices
+| Package | Version | Purpose |
+|---------|---------|---------|
+| Flask | 3.0.3 | Web framework |
+| Flask-SQLAlchemy | 3.1.1 | ORM |
+| Flask-Migrate | 4.0.7 | Schema migrations (Alembic) |
+| flask-smorest | 0.44.0 | OpenAPI 3 docs + request validation |
+| marshmallow | 3.21.3 | Schema serialization |
+| openai | 1.3.0 | GPT-3.5-turbo integration |
+| pydantic | 2.5.0 | Service-layer data models |
+| pytest | 7.4.3 | Test suite |
