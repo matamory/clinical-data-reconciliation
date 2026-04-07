@@ -10,7 +10,7 @@ from flask_smorest import Blueprint
 
 from .. import db
 from ..schemas import PatientRecordSchema, ReconciliationResultSchema
-from ..models import ReconciliationResult
+from ..models import ReconciliationResult, Patient
 from ..reconcilation_service.reconcile_meds import MedicationReconciliation
 
 reconciliation_bp = Blueprint(
@@ -42,8 +42,17 @@ def reconcile_medication(args):
     try:
         result = _service.reconcile_medication(args)
 
-        # Governing: SPEC-0001 REQ "SQLAlchemy ORM Data Layer" — persist result with timestamp
+        # Governing: SPEC-0001 REQ "SQLAlchemy ORM Data Layer" — persist result with patient reference
+        patient_context = args.get("patient_context", {})
+        patient = Patient(
+            age=patient_context.get("age"),
+            conditions=patient_context.get("conditions", []),
+        )
+        db.session.add(patient)
+        db.session.flush()  # assigns patient.id within the transaction
+
         db_record = ReconciliationResult(
+            patient_id=patient.id,
             reconciled_medication=result.get("reconciled_medication") or "Unknown",
             confidence_score=result.get("confidence_score", 0.0),
             clinical_safety_check=result.get("clinical_safety_check", "REVIEW_REQUIRED"),

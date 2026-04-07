@@ -1,3 +1,8 @@
+---
+status: implemented
+date: 2026-04-07
+---
+
 # SPEC-0003: Data Quality Validation
 
 ## Overview

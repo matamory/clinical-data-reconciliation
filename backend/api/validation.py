@@ -6,12 +6,13 @@ Governing: SPEC-0001 REQ "Flask API Routes", SPEC-0001 REQ "API Endpoint Compati
            SPEC-0003 REQ "ORM Persistence"
 """
 
+from datetime import date
 from flask import jsonify, make_response
 from flask_smorest import Blueprint
 
 from .. import db
 from ..schemas import DataQualityInputSchema, DataQualityOutputSchema
-from ..models import DataQualityResult
+from ..models import DataQualityResult, Patient
 from ..validation_service.data_validator import DataValidator
 
 validation_bp = Blueprint(
@@ -51,8 +52,26 @@ def validate_data_quality(args):
         ]
 
         # Governing: SPEC-0001 REQ "SQLAlchemy ORM Data Layer",
-        #            SPEC-0003 REQ "ORM Persistence" — persist result with UTC timestamp
+        #            SPEC-0003 REQ "ORM Persistence" — persist result with patient reference and UTC timestamp
+        demographics = args.get("demographics", {})
+        dob_str = demographics.get("dob")
+        age = None
+        if dob_str:
+            try:
+                dob = date.fromisoformat(dob_str)
+                today = date.today()
+                age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+            except (ValueError, TypeError):
+                pass
+        patient = Patient(
+            age=age,
+            conditions=args.get("conditions", []),
+        )
+        db.session.add(patient)
+        db.session.flush()  # assigns patient.id within the transaction
+
         db_record = DataQualityResult(
+            patient_id=patient.id,
             overall_score=float(result.get("overall_score", 0)),
             completeness=float(breakdown.get("completeness", 0)),
             validity=float(breakdown.get("validity", 0)),
